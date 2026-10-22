@@ -31,7 +31,10 @@ export function commandOf(ti) {
     c = c.length >= 3 && /(^|\/)(ba|z)?sh$/.test(c[0]) && /^-l?c$/.test(c[1]) ? c[2] : c.join(' ');
   }
   if (typeof c !== 'string') return undefined;
-  const wrapped = c.match(/^\s*(?:\S*\/)?(?:ba|z)?sh\s+-l?c\s+(['"])([\s\S]*)\1\s*$/);
+  // Unwrap `sh -c '...'` only when the quoted body is the entire command. A greedy
+  // body would match across a chained command (`sh -c "a" && sh -c "b"`) and eat the
+  // quotes, so the body may not contain its own delimiter.
+  const wrapped = c.match(/^\s*(?:\S*\/)?(?:ba|z)?sh\s+-l?c\s+(['"])((?:(?!\1)[\s\S])*)\1\s*$/);
   return (wrapped ? wrapped[2] : c).trim();
 }
 
