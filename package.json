@@ -1,0 +1,10 @@
+{
+  "name": "agentwatch",
+  "version": "0.1.0",
+  "description": "A terminal view of what your Claude Code and Codex sessions are doing",
+  "type": "module",
+  "bin": { "agentwatch": "bin/agentwatch.js" },
+  "files": ["bin", "src"],
+  "engines": { "node": ">=18.17" },
+  "license": "MIT"
+}
