@@ -36,7 +36,13 @@ Sessions are sorted by how much they need you:
 | idle | Your turn, untouched for 20 minutes. |
 | ended | Session closed. Hidden after 30 minutes unless you press `a`. |
 
-Each card shows what the agent is doing right now, then a strip of coloured blocks: one block per tool call, newest on the right, coloured by phase. Reading the strip left to right tells you the shape of the turn: a run of blue is exploration, yellow is editing, green is tests or builds, red is something that failed. Below that is the agent's own plan (from `TodoWrite` in Claude Code or `update_plan` in Codex) and your last prompt.
+Each card is one session, and reads top to bottom:
+
+- **Who and where** — status, agent and model, repo and branch, and how long since its last event.
+- **What it is doing, and for how long** — `verifying  4m  npm test`. That duration is the age of the current step, so a number that keeps climbing is a long command, and one that stops moving while the status turns yellow is a hang. A session that has finished its turn shows how long the turn took instead, and a blocked one shows how long you have been the blocker.
+- **The strip** — one block per tool call, newest on the right, coloured by phase. Reading it left to right tells you the shape of the turn: a run of blue is exploration, yellow is editing, green is tests or builds, red is something that failed.
+- **Plan and files** — how far through its own plan (from `TodoWrite` in Claude Code or `update_plan` in Codex), and the files it has changed. The names need a wide terminal; the count is always in the line above.
+- **Your last prompt.**
 
 Press enter on a session for the detail view: the full plan, files changed, how the session's effort splits across phases, and a timestamped activity log.
 

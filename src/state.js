@@ -64,6 +64,7 @@ function newSession(e) {
     approval: null,
     prompt: null,
     turnStartedAt: null,
+    lastTurnMs: null,
     current: null,
     lastMsg: null,
     timeline: [],
@@ -172,7 +173,7 @@ export function apply(store, e) {
       entry.ok = ok;
       if (!ok) { s.fails++; note(s, e.ts, 'fail', `failed: ${describe(e, entry.phase)}`); }
       if (entry.phase === 'delegate' && s.agent === 'claude') s.subagents = Math.max(0, s.subagents - 1);
-      if (s.current && s.current.tuid === e.tuid) { s.current.done = true; s.current.ok = ok; }
+      if (s.current && s.current.tuid === e.tuid) { s.current.done = true; s.current.ok = ok; s.current.doneAt = e.ts; }
       if (s.status === 'approval' || s.status === 'yourturn') { setStatus(s, 'working', e.ts); s.approval = null; }
       break;
     }
@@ -197,6 +198,7 @@ export function apply(store, e) {
       if (s.current) s.current.done = true;
       s.lastMsg = e.msg || null;
       const took = s.turnStartedAt ? e.ts - s.turnStartedAt : null;
+      s.lastTurnMs = took;
       note(s, e.ts, 'done', `turn finished${took != null ? ` in ${fmtDuration(took)}` : ''}`);
       s.turnStartedAt = null;
       if (s.agent === 'claude') s.subagents = 0;

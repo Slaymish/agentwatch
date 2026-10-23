@@ -66,6 +66,9 @@ function line(left, right, width) {
 const ago = (ms) => (ms < 5000 ? 'now' : `${fmtDuration(ms)} ago`);
 const clock = (ts) => new Date(ts).toTimeString().slice(0, 8);
 const firstLine = (s) => (s ? String(s).split(/\n/)[0] : '');
+// "claude-opus-4-1" and "claude-3-5-sonnet-20241022" both get to keep the part that
+// says which model it is, without the vendor prefix or the build date.
+const shortModel = (m) => (m ? String(m).replace(/^claude-/, '').replace(/-\d{8}$/, '').slice(0, 12) : '');
 
 // ── session list ────────────────────────────────────────────────────────────────
 function strip(s, maxLen, now) {
@@ -78,44 +81,74 @@ function strip(s, maxLen, now) {
   });
 }
 
+// Every state gets a duration in the same column: how long it has been like this.
+// For a running tool that is the "is it stuck?" question answered without the detail
+// view; for a finished turn it is what the turn cost in wall clock.
+const DUR_W = 5;
+const duration = (from, now, style) => [(from ? fmtDuration(Math.max(0, now - from)) : '').padEnd(DUR_W), style];
+
 function activityLine(s, status, now) {
   const ind = '   ';
-  if (status === 'approval') return [[ind], ['waiting on your approval  ', both(st.bold, st.red)], [s.approval || '']];
+  if (status === 'approval') {
+    const waited = s.statusAt ? ` for ${fmtDuration(now - s.statusAt)}` : '';
+    return [[ind], [`waiting on your approval${waited}  `, both(st.bold, st.red)], [s.approval || '']];
+  }
   if (status === 'ended') return [[ind], [`ended ${ago(now - (s.endedAt || s.lastAt))}`, st.gray]];
   if (status === 'yourturn' || status === 'idle') {
-    const lead = status === 'idle' ? `idle for ${fmtDuration(now - s.lastAt)}` : 'turn finished';
+    const lead = status === 'idle'
+      ? `idle for ${fmtDuration(now - s.lastAt)}`
+      : s.lastTurnMs != null ? `turn finished in ${fmtDuration(s.lastTurnMs)}` : 'turn finished';
     return [[ind], [lead, status === 'idle' ? st.gray : st.cyan], s.lastMsg ? ['  ' + firstLine(s.lastMsg), st.dim] : null];
   }
+  const quiet = status === 'quiet' ? st.yellow : st.dim;
   const c = s.current;
-  if (!c) return [[ind], ['thinking', st.dim]];
+  if (!c) return [[ind], ['thinking'.padEnd(11), st.dim], duration(s.turnStartedAt, now, quiet)];
   const phase = PHASES[c.phase] || PHASES.other;
+  // A plan update already reads as "planning" and its content is on the plan line
+  // below, so naming the tool again just repeats itself.
+  const target = c.phase === 'plan' ? '' : c.target || c.tool;
   if (c.done) {
-    return [[ind], ['thinking', st.dim], [`  after ${phase.label} `, st.dim], [c.target || c.tool, st.dim]];
+    const after = target ? `after ${phase.label} ` : `after ${phase.label}`;
+    return [[ind], ['thinking'.padEnd(11), st.dim], duration(c.doneAt || s.turnStartedAt, now, quiet), [after, st.dim], target ? [target, st.dim] : null];
   }
-  const quiet = status === 'quiet' ? [`  no events for ${fmtDuration(now - s.lastAt)}`, st.yellow] : null;
-  return [[ind], [phase.label.padEnd(11), phaseStyle(c.phase)], [c.target || c.tool], quiet];
+  return [[ind], [phase.label.padEnd(11), phaseStyle(c.phase)], duration(c.at, now, quiet), target ? [target] : null];
 }
 
 function statsSegs(s) {
   const out = [];
-  const changed = s.files.size;
-  if (changed) out.push([`${changed} file${changed === 1 ? '' : 's'} changed`, st.dim]);
+  if (s.files.size) out.push([`${s.files.size} file${s.files.size === 1 ? '' : 's'}`, st.dim]);
   out.push([`${s.tools} tool${s.tools === 1 ? '' : 's'}`, st.dim]);
   if (s.fails) out.push([`${s.fails} failed`, st.red]);
   if (s.subagents) out.push([`${s.subagents} subagent${s.subagents === 1 ? '' : 's'}`, st.cyan]);
   return out.flatMap((seg, i) => (i ? [['   '], seg] : [seg]));
 }
 
+// The files worth naming, kept inside a budget so they never crowd out the plan:
+// two names when they fit, otherwise the busiest one and a count. A file already
+// named on the activity line above is skipped rather than repeated.
+const relPath = (s, f) => (s.cwd && f.startsWith(s.cwd + '/') ? f.slice(s.cwd.length + 1) : f);
+
+function changedFiles(s, budget, skip) {
+  const entries = [...s.files.entries()].sort((a, b) => b[1] - a[1]);
+  const names = entries.map(([f]) => relPath(s, f)).filter((n) => n !== skip);
+  if (!names.length) return '';
+  const more = (n) => (names.length > n ? ` +${names.length - n}` : '');
+  const two = `${names[0]}, ${names[1]}${more(2)}`;
+  if (names.length > 1 && two.length <= budget) return two;
+  return names[0] + more(1);
+}
+
 function card(s, selected, width, now) {
   const status = displayStatus(s, now);
   const S = STATUS[status];
   const repo = repoInfo(s.cwd);
+  const model = shortModel(s.model);
   const gutter = selected ? ['▌ ', st.white] : ['  '];
   const lines = [];
 
   lines.push(line(
     [gutter, [S.mark + ' ', S.style], [S.label.padEnd(11), S.style], [s.agent.padEnd(8), st.bold], [repo.name, st.bold], repo.branch ? ['  ' + repo.branch, st.dim] : null],
-    [[`${s.sid.slice(0, 6)}  `, st.gray], [ago(now - s.lastAt), st.dim]],
+    [[`${model || s.sid.slice(0, 6)}  `, st.gray], [ago(now - s.lastAt), st.dim]],
     width,
   ));
   lines.push(fit([[selected ? '▌' : ' ', st.white], ...activityLine(s, status, now).filter(Boolean).map((seg, i) => (i === 0 ? [seg[0].slice(1)] : seg))], width));
@@ -126,9 +159,20 @@ function card(s, selected, width, now) {
   const bar = strip(s, stripLen, now);
   lines.push(fit([[selected ? '▌  ' : '   ', st.white], ...bar, bar.length ? ['   '] : null, ...stats], width));
 
+  // How far through its plan, and which files it has touched: one line, two answers.
+  // The plan gets the width it wants first, since it is the agent's own statement of
+  // what it is doing; the file names take what is left. Below ~70 columns the stats
+  // already carry the count, so the plan keeps the whole line.
   const plan = planProgress(s.plan);
-  if (plan && plan.done < plan.total) {
-    lines.push(fit([[selected ? '▌  ' : '   ', st.white], [`plan ${plan.done}/${plan.total}  `, st.cyan], [plan.step || '']], width));
+  const planSegs = plan && plan.done < plan.total ? [[`plan ${plan.done}/${plan.total}  `, st.cyan], [plan.step || '']] : [];
+  const planW = planSegs.reduce((n, [t]) => n + textWidth(t), 0);
+  const budget = Math.min(Math.floor(width * 0.5), width - planW - 6);
+  const editing = s.current && !s.current.done ? s.current.target : '';
+  const files = width >= 70 && budget > 12 ? changedFiles(s, budget, editing) : '';
+  if (planSegs.length || files) {
+    const lead = [[selected ? '▌  ' : '   ', st.white], ...planSegs];
+    const trail = files ? [['✎ ', st.yellow], [files, st.dim]] : [];
+    lines.push(planSegs.length && trail.length ? line(lead, trail, width) : fit([...lead, ...trail], width));
   }
   if (s.prompt) lines.push(fit([[selected ? '▌  ' : '   ', st.white], ['› ' + s.prompt, st.dim]], width));
   return lines;
