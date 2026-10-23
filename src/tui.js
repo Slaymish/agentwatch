@@ -69,7 +69,8 @@ const firstLine = (s) => (s ? String(s).split(/\n/)[0] : '');
 
 // ── session list ────────────────────────────────────────────────────────────────
 function strip(s, maxLen, now) {
-  const items = s.timeline.slice(-maxLen);
+  // slice(-0) is slice(0): with no room for the bar, take nothing, not everything.
+  const items = maxLen > 0 ? s.timeline.slice(-maxLen) : [];
   return items.map((t) => {
     const live = t.ok === null && s.current && s.current.tuid === t.tuid && !s.current.done && displayStatus(s, now) !== 'ended';
     if (t.ok === false) return ['▇', st.red];
