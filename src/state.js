@@ -25,7 +25,9 @@ const VERIFY_CMD = [
   /^python\S*\s+-m\s+(pytest|unittest|mypy)\b/,
   /^(dotnet|mvn|gradle|\.\/gradlew)\s+(test|build|verify|check)\b/,
 ];
-const CHANGE_CMD = /^(mv|cp|rm|mkdir|touch|ln|chmod|git\s+(add|commit|mv|rm|restore|apply|stash|switch|checkout|merge|rebase|push)|gh\s+pr\s+create|sed\s+-i|(npm|pnpm|yarn|bun)\s+(i|install|add|remove|uninstall)\b)/;
+// Every alternative is anchored on a word boundary: without one, `mv` matches `mvn`
+// and `ln` matches `lnav`, so a Maven build is painted as an edit.
+const CHANGE_CMD = /^(?:(?:mv|cp|rm|rmdir|mkdir|touch|ln|chmod)\b|git\s+(?:add|commit|mv|rm|restore|apply|stash|switch|checkout|merge|rebase|push)\b|gh\s+pr\s+create\b|sed\s+-i\b|(?:npm|pnpm|yarn|bun)\s+(?:i|install|add|remove|uninstall)\b)/;
 const EXPLORE_CMD = /^(rg|grep|ag|ls|cat|bat|head|tail|less|sed\s+-n|awk|find|fd|tree|wc|pwd|nl|file|stat|du|jq|which|echo|git\s+(status|diff|log|show|blame|branch|grep|ls-files))\b/;
 
 export function classifyCommand(cmd = '') {
