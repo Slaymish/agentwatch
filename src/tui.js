@@ -182,6 +182,7 @@ export function renderList(ui, store, width, height, now) {
     out.push(...cards[i].lines, '');
     used += need;
   }
+  if (out.length > height - 1) out.length = Math.max(0, height - 1);
   while (out.length < height - 1) out.push('');
   const footer = [['↑↓', st.bold], [' select   ', st.dim], ['enter', st.bold], [' details   ', st.dim], ['a', st.bold], [ui.showAll ? ' hide old   ' : ` show all${hidden ? ` (${hidden} hidden)` : ''}   `, st.dim], ['b', st.bold], [` bell ${ui.bell ? 'on' : 'off'}   `, st.dim], ['q', st.bold], [' quit', st.dim]];
   out.push(fit([[' '], ...footer], width));
@@ -258,14 +259,18 @@ export function renderDetail(ui, store, width, height, now) {
   }
   if (mixSegs.length) { out.push(fit([['   '], ...mixSegs], width)); out.push(''); }
 
-  out.push(fit([['   Activity', st.bold], ['   newest at the bottom', st.dim]], width));
-  const room = Math.max(0, height - out.length - 1);
-  const entries = s.log.slice(-room);
-  for (const l of entries) {
-    const style = KIND_STYLE[l.kind];
-    const lead = PHASES[l.kind] ? ['▇ ', phaseStyle(l.kind)] : ['  '];
-    out.push(fit([['   '], [clock(l.ts) + '  ', st.dim], lead, [l.text, style]], width));
+  // Reserve one line for the Activity heading and one for the footer, so a short
+  // terminal loses log lines instead of losing the keys that get you out.
+  const room = Math.max(0, height - out.length - 2);
+  if (room > 0) {
+    out.push(fit([['   Activity', st.bold], ['   newest at the bottom', st.dim]], width));
+    for (const l of s.log.slice(-room)) {
+      const style = KIND_STYLE[l.kind];
+      const lead = PHASES[l.kind] ? ['▇ ', phaseStyle(l.kind)] : ['  '];
+      out.push(fit([['   '], [clock(l.ts) + '  ', st.dim], lead, [l.text, style]], width));
+    }
   }
+  if (out.length > height - 1) out.length = Math.max(0, height - 1);
   while (out.length < height - 1) out.push('');
   out.push(fit([[' '], ['esc', st.bold], [' back   ', st.dim], ['↑↓', st.bold], [' other sessions   ', st.dim], ['q', st.bold], [' quit', st.dim]], width));
   return out.slice(0, height);
